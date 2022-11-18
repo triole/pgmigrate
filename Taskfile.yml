@@ -1,0 +1,60 @@
+version: '3'
+
+env:
+    UID:
+        sh: id -u
+    GID:
+        sh: id -g
+
+vars:
+    CURDIR:
+        sh: pwd
+    NAME:
+        sh: pwd | grep -Po "[^/]+$"
+
+tasks:
+    default:
+        desc: build and run
+        cmds:
+            - task: build
+            - task: run
+            - task: migrate
+            - task: rm
+
+    run:
+        desc: run container
+        cmds:
+            - cmd: >-
+                docker run -d --rm
+                --name {{.NAME}}
+                --env UID={{.UID}}
+                --env GID={{.GID}}
+                --volume "{{.CURDIR}}/vol:/vol"
+                -p "9876:5432"
+                {{.NAME}}
+
+    build:
+        desc: build container
+        cmds:
+            - cmd: >-
+                docker build
+                --build-arg UID={{.UID}}
+                --build-arg GID={{.GID}}
+                --tag {{.NAME}} .
+
+    rm:
+        desc: remove container and image
+        cmds:
+            - cmd: docker rm -f {{.NAME}}
+            - cmd: docker rmi -f {{.NAME}}
+
+    rebuild:
+        desc: rebuild the container, remove and build
+        cmds:
+            - task: rm
+            - task: default
+
+    migrate:
+        desc: execute migrate inside the runing container
+        cmds:
+            - cmd: docker exec -it {{.NAME}} migrate

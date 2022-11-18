@@ -1,0 +1,36 @@
+#!/bin/bash
+
+dbfiles=($(find /vol -regex ".*sql.gz" | grep -v "migrated" | sort | head -n 1))
+pgversion="$(postgres --version | grep -Po "[0-9\.]+" | head -n 1 | sed 's/\./_/g')"
+user=postgres
+
+function waitforpg() {
+    pg_isready || (
+        sleep 1
+        waitforpg
+    )
+}
+
+waitforpg
+
+debug="false"
+if [[ -n "${1}" ]]; then
+    debug="true"
+fi
+
+function rcmd() {
+    cmd=${@}
+    echo -e "\\033[0;93m${cmd}\\033[0m"
+    if [[ "${debug}" == "false" ]]; then
+        eval ${@}
+    fi
+}
+
+for fil in "${dbfiles[@]}"; do
+    shortname="$(echo "${fil}" | grep -Po "[^/]+$")"
+    noext="$(echo "${shortname}" | grep -Po ".*?(?=\.)" | head -n 1)"
+    outfile="/vol/migrated_${noext}_pgv${pgversion}.sql.gz"
+    rcmd "zcat \"${fil}\" | psql -U ${user} -v --"
+    rcmd "pg_dump -U ${user} | gzip >\"${outfile}\""
+    chown ${user}.${user} "${outfile}"
+done
